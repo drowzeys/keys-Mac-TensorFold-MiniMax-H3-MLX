@@ -1,0 +1,11 @@
+keys-Mac-TensorFold-MiniMax-H3-MLX
+Pack: drowzeys / keys.
+
+This pack installs and runs other people's work. See CREDITS.md.
+
+MiniMax H3 is licensed under the MiniMax H3 Community License Agreement, Copyright © 2026 MiniMax. All Rights Reserved.
+This pack ships no model weights. The MiniMax H3 Community License limits the territories in which MiniMax H3 may
+be used; read it before downloading the weights.
+
+Engine source: TensorFold (Apache-2.0, Ash Hart and contributors) with an H3 family adapted from minimax-h3-mlx
+(Apache-2.0, mrbizarro) and int8 kernels that follow the quantization scheme of h3.c (MIT, Salvatore Sanfilippo).
