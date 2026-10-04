@@ -146,7 +146,8 @@ runtime**: Metal does not run in a container, so `oneshot-setup.sh` installs the
   than Turbo; it is published for 1344x768, which was not tested.
 - **Licence.** MiniMax H3 is under the MiniMax H3 Community License, which excludes some territories. This pack
   ships no weights. Read the licence before downloading them.
-- The H3 family is proposed upstream as a draft pull request to TensorFold. It is not part of a TensorFold release.
+- The H3 family is proposed upstream as a draft pull request, ashhart/TensorFold#384. It is not part of a TensorFold
+  release.
 
 ## Credits
 
