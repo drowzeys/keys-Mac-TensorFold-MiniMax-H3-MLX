@@ -53,6 +53,23 @@ bfloat16 side branch and TensorFold as int8 weights, so the pictures differ; thi
 
 Raw numbers and method: [`bench/results/RESULTS.md`](bench/results/RESULTS.md).
 
+### Shootout: 8 seconds, image to video, 1344x768, four implementations
+
+Same first frame, prompt and seed (40905090), 192 frames with audio. Clips and method: [`shootout/`](shootout/).
+
+| Entry | Generation time | Steps | Technology | Video / audio quality |
+|---|---:|---:|---|---|
+| **keys TensorFold H3 + Turbo** | **357 s** | 3 | MLX + int8 Metal kernels + lightx2v Turbo adapter | sharp, most motion / line spoken correctly |
+| RobZombAI H3MLX | 1,675 s | 20 | C + Metal, second-order solver, int8 MLP | sharpest / line spoken correctly |
+| antirez h3.c | 2,018 s | 20 | C + Metal, int8 projections | crisp / line spoken correctly |
+| keys TensorFold H3 | 2,106 s | 20 | MLX + int8 Metal kernels | softer / line spoken correctly |
+| mrbizarro minimax-h3-mlx | 2,451 s | 20 | Python + MLX, pruned bf16 transformer | softer / line spoken correctly |
+
+At 20 steps the C engines are faster and sharper; TensorFold leads only with the Turbo adapter. Quality was judged
+from stills, an edge score and speech recognition, not by watching.
+
+![shootout stills](shootout/contact_sheet_shootout.jpg)
+
 ## What makes it fast
 
 | Piece | Effect at 864x480, 124 frames |
