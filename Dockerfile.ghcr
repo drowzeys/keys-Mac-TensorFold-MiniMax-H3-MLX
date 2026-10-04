@@ -2,7 +2,7 @@
 # container. It carries the pinned TensorFold wheel (with the H3 family), the dependency lock and the render
 # script; oneshot-setup.sh copies them out and installs natively on the Mac.
 #
-#   docker run --rm -v "$PWD":/out ghcr.io/drowzeys/keys-mac-tensorfold-minimax-h3-mlx:1.0 cp -a /payload/. /out/
+#   docker run --rm -v "$PWD":/out ghcr.io/drowzeys/keys-mac-tensorfold-minimax-h3-mlx:1.1 cp -a /payload/. /out/
 FROM busybox:1.37
 LABEL org.opencontainers.image.source="https://github.com/drowzeys/keys-Mac-TensorFold-MiniMax-H3-MLX"
 LABEL org.opencontainers.image.description="Carrier (not a runtime): TensorFold 0.6.5 + MiniMax H3 family wheel, dependency lock and render script for Apple Silicon"

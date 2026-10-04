@@ -15,9 +15,9 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PREFIX="${PREFIX:-$HOME/.local/opt/tensorfold-h3}"
 H3_MODEL_DIR="${H3_MODEL_DIR:-$HOME/h3-models/MiniMax-H3}"
-IMAGE="${IMAGE:-ghcr.io/drowzeys/keys-mac-tensorfold-minimax-h3-mlx:1.0}"
+IMAGE="${IMAGE:-ghcr.io/drowzeys/keys-mac-tensorfold-minimax-h3-mlx:1.1}"
 TF_REPO="https://github.com/drowzeys/TensorFold.git"
-TF_COMMIT="b8d1682ec315fa4b3649aa4ec9579670a3b89576"
+TF_COMMIT="ea9b63728b690e511722a18ace3b43521a750789"
 REF_REPO="https://github.com/mrbizarro/minimax-h3-mlx.git"
 REF_COMMIT="79190205258454b43e6c9e50e577de234222419c"
 ADAPTER_NAME="lightx2v_v1.0_768p_ourlayout.safetensors"
@@ -50,17 +50,21 @@ fetch_ghcr() {
 }
 
 step "TensorFold 0.6.5 + H3 family @ ${TF_COMMIT:0:8} (own venv at $PREFIX)"
-if [ ! -x "$PREFIX/venv/bin/python" ] || ! "$PREFIX/venv/bin/python" -c "import tensorfold.families.h3" 2>/dev/null; then
+# an install from an older pack lacks first-frame support in the sampler; reinstall it
+HAS_ENGINE='import inspect; from tensorfold.families.h3.sampler import denoise; assert "condition" in inspect.signature(denoise).parameters'
+if [ ! -x "$PREFIX/venv/bin/python" ] || ! "$PREFIX/venv/bin/python" -c "$HAS_ENGINE" 2>/dev/null; then
   [ "$MODE" = "--verify" ] && die "TensorFold with the H3 family is not installed at $PREFIX"
   mkdir -p "$HERE/payload" "$PREFIX"
-  ls "$HERE"/payload/tensorfold-*.whl >/dev/null 2>&1 || fetch_ghcr || echo "  no carrier payload; installing from git"
-  uv venv -q -p "$(command -v python3.11)" "$PREFIX/venv"
+  # a payload left by an older pack would fail its checksums against this pack's files; fetch a fresh one
+  ( cd "$HERE/payload" 2>/dev/null && shasum -a 256 -c SHA256SUMS >/dev/null 2>&1 && cmp -s h3_generate.py "$HERE/h3_generate.py" ) \
+    || { rm -f "$HERE"/payload/tensorfold-*.whl "$HERE"/payload/SHA256SUMS; fetch_ghcr || echo "  no carrier payload; installing from git"; }
+  [ -x "$PREFIX/venv/bin/python" ] || uv venv -q -p "$(command -v python3.11)" "$PREFIX/venv"
   if ls "$HERE"/payload/tensorfold-*.whl >/dev/null 2>&1; then
     ( cd "$HERE/payload" && shasum -a 256 -c SHA256SUMS >/dev/null ) || die "carrier payload checksum mismatch"
     ok "carrier payload checksums verified"
-    uv pip install -q -p "$PREFIX/venv/bin/python" -r "$HERE/requirements.lock" "$HERE"/payload/tensorfold-*.whl
+    uv pip install -q --reinstall-package tensorfold -p "$PREFIX/venv/bin/python" -r "$HERE/requirements.lock" "$HERE"/payload/tensorfold-*.whl
   else
-    uv pip install -q -p "$PREFIX/venv/bin/python" -r "$HERE/requirements.lock" "tensorfold @ git+$TF_REPO@$TF_COMMIT"
+    uv pip install -q --reinstall-package tensorfold -p "$PREFIX/venv/bin/python" -r "$HERE/requirements.lock" "tensorfold @ git+$TF_REPO@$TF_COMMIT"
   fi
 fi
 cp "$HERE/h3_generate.py" "$PREFIX/h3_generate.py"
@@ -117,3 +121,4 @@ PREFIX="$PREFIX" H3_MODEL_DIR="$H3_MODEL_DIR" PROMPT_FILE="$HERE/prompts/black-m
 echo
 echo "DONE. $HERE/outputs/test.mp4"
 echo "Render: bash $HERE/scripts/generate.sh \"your prompt\" out.mp4   (WIDTH/HEIGHT multiples of 32, FRAMES = 17n+5)"
+echo "Image to video: FIRST_FRAME=photo.jpg bash $HERE/scripts/generate.sh \"what happens next\" out.mp4"

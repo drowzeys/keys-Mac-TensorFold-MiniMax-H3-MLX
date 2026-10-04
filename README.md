@@ -5,12 +5,13 @@ contributors, mrbizarro (minimax-h3-mlx / Phosphene), Apple's MLX team and every
 (MiniMax H3), NVIDIA Research (Sol-Engine, Sol-Attn, Sol-H3), LightX2V (the Turbo adapter) and FastVideo (FastH3).
 This pack is their work, ported, pinned and measured. See [CREDITS.md](CREDITS.md).
 
-**1.0** · Mac Studio M5 Ultra 256 GB · [TensorFold](https://github.com/ashhart/TensorFold) **0.6.5** + an H3 family ·
+**1.1** · Mac Studio M5 Ultra 256 GB · [TensorFold](https://github.com/ashhart/TensorFold) **0.6.5** + an H3 family ·
 **MiniMax H3** (FL2VA, bfloat16 weights) · int8 kernels on the M5 tensor units · lightx2v **Turbo** adapter
 
 **A 5 second 864x480 clip with stereo audio in about 50 seconds; 40 seconds at 768x448.** The fastest MiniMax H3
 we have measured on Apple Silicon, by a small margin over Phosphene's few-step mode and a large one over the
-20-step engines. One-shot install from a GHCR prebuilt carrier.
+20-step engines. One-shot install from a GHCR prebuilt carrier. Text to video and, from 1.1, **image to video** from a
+first frame.
 
 ![h3.c 20 steps / TensorFold int8 20 steps / TensorFold Turbo int8, same prompt](samples/contact_sheet.jpg)
 
@@ -78,7 +79,7 @@ bash oneshot-setup.sh
 
 `oneshot-setup.sh` does the following:
 
-1. Gets TensorFold 0.6.5 with the H3 family (`drowzeys/TensorFold` at `b8d1682e`), from the **GHCR prebuilt
+1. Gets TensorFold 0.6.5 with the H3 family (`drowzeys/TensorFold` at `ea9b6372`), from the **GHCR prebuilt
    carrier** when Docker is available (checksums verified), otherwise from git at the same commit.
 2. Installs it with the exact dependency lock ([`requirements.lock`](requirements.lock): mlx 0.32.3, mlx-lm
    0.32.0, mlx-vlm 0.7.4, transformers 5.18.0, …) into its own venv at `~/.local/opt/tensorfold-h3`.
@@ -94,19 +95,30 @@ install; `--no-render` skips the test clip.
 
 ```bash
 bash scripts/generate.sh "A hummingbird hovering over red flowers, soft wing hum" out.mp4
+FIRST_FRAME=photo.jpg WIDTH=1344 HEIGHT=768 bash scripts/generate.sh "She turns to the camera and smiles" out.mp4
 WIDTH=768 HEIGHT=448 SEED=7 bash scripts/generate.sh "..." out.mp4
 PROMPT_FILE=prompts/black-mirror-scene.txt SEED=2077 bash scripts/generate.sh "" out.mp4
 ADAPTER=none POINTS=21 bash scripts/generate.sh "..." out.mp4          # 20 steps, no adapter
 ```
 
-`FRAMES` must be `17n + 5` (56, 73, 90, 124, 243, 362); `WIDTH` and `HEIGHT` multiples of 32.
+`FRAMES` must be `17n + 5` (56, 73, 90, 124, 192, 243, 362); `WIDTH` and `HEIGHT` multiples of 32, at most 768x1344
+pixels in total (the model's released limit).
+
+### Image to video
+
+`FIRST_FRAME=image` starts the clip from that image and the prompt describes what happens next. The image is
+stretched onto `WIDTH` x `HEIGHT`, so pick a canvas with its aspect ratio (1344x768 for 16:9, 768x1344 for 9:16,
+768x768 for square) or crop it first. MiniMax's own image-to-video prompts open with a line such as
+`For the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.`
+followed by the scene description; plain descriptions work too. Works with the Turbo adapter and with
+`ADAPTER=none POINTS=21`. Last-frame and reference-image modes are not wired.
 
 ### GHCR prebuilt carrier
 
 ```bash
-docker pull ghcr.io/drowzeys/keys-mac-tensorfold-minimax-h3-mlx:1.0
-# index digest sha256:063d10c78ba8028cbfe1d7c85be6ef0d0b0978fb3cfc1c7fae131469bf42671c (linux/arm64 + linux/amd64)
-docker run --rm -v "$PWD":/out ghcr.io/drowzeys/keys-mac-tensorfold-minimax-h3-mlx:1.0 cp -a /payload/. /out/payload/
+docker pull ghcr.io/drowzeys/keys-mac-tensorfold-minimax-h3-mlx:1.1
+# index digest sha256:61cc4864a820e46ace4acb971ed71dd2639fd247b31c29b72618a56ae5aeb1a3 (linux/arm64 + linux/amd64)
+docker run --rm -v "$PWD":/out ghcr.io/drowzeys/keys-mac-tensorfold-minimax-h3-mlx:1.1 cp -a /payload/. /out/payload/
 ```
 
 The carrier holds the TensorFold wheel, `requirements.lock`, `h3_generate.py` and `SHA256SUMS`. **It is not a Mac
@@ -118,7 +130,7 @@ runtime**: Metal does not run in a container, so `oneshot-setup.sh` installs the
 | Piece | Value |
 |---|---|
 | Host | Mac Studio M5 Ultra, 256 GB, macOS 27.0.1 |
-| Engine | TensorFold 0.6.5 (`609ca419`) + one H3 commit, `drowzeys/TensorFold` @ `b8d1682ec315fa4b3649aa4ec9579670a3b89576` (Apache-2.0) |
+| Engine | TensorFold 0.6.5 (`609ca419`) + two H3 commits, `drowzeys/TensorFold` @ `ea9b63728b690e511722a18ace3b43521a750789` (Apache-2.0) |
 | Model | `MiniMaxAI/MiniMax-H3`, `FL2VA` partition: 33B transformer (61.7 GiB bfloat16), Qwen3-VL text encoder, video and audio VAEs |
 | Adapter | lightx2v MiniMax H3 Turbo v1.0, runner layout as published by Phosphene (sha256 `d51d626f…`) |
 | Borrowed at run time | minimax-h3-mlx @ `79190205`: text encoder, audio decoder, MP4 writer |
@@ -131,7 +143,10 @@ runtime**: Metal does not run in a container, so `oneshot-setup.sh` installs the
   decoder are TensorFold's H3 family. The text encoder, audio decoder and MP4 writer are still minimax-h3-mlx's,
   run through `h3_generate.py`. There is no `tensorfold generate` command and no server; the model loads on every
   run.
-- **Text-to-video only is measured.** First-frame and reference modes are not wired in this family.
+- **Image to video is new in 1.1 and lightly tested.** A first frame was checked on one image at 1344x768 (56 frames):
+  the clip opens on the image (33-34 dB against it after encoding) and follows the prompt. The image is encoded by
+  minimax-h3-mlx's VAE encoder and vision tower, which this pack already installs. The speed tables above are text
+  to video; a first frame adds one latent frame of rows and the vision tokens to the sequence.
 - **Picture quality is not graded.** The transformer equals minimax-h3-mlx's on a real step in bfloat16, and the
   float32 video decode equals its decode. The int8 path does not: a 20-step int8 render keeps the bfloat16
   composition with different detail, and a 3-forward Turbo render in int8 lands on a different composition from

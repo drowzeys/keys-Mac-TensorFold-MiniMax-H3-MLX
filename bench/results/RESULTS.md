@@ -87,6 +87,21 @@ pairs needed to keep that share of each query block's attention:
 | 95% | 22-68% | 51-95% |
 | 99% | 44-83% | 81-99% |
 
+## Image to video (1.1)
+
+First frame from one 1344x768 image, 56 frames, seed 40905090, MiniMax-format prompt. First decoded frame against the
+input image, and wall time, on the same Mac:
+
+| Engine | Steps | First frame | Wall |
+|---|---:|---:|---:|
+| antirez h3.c | 4 | 33.0 dB | 94 s |
+| H3MLX | 4 | 30.8 dB | 58 s |
+| minimax-h3-mlx runner | 4 | 32.6 dB | 97 s |
+| TensorFold, int8 | 4 | 32.9 dB | 76 s |
+| TensorFold, Turbo adapter, int8 | 3 | 34.2 dB | 63 s |
+
+All five clips open on the image and follow the prompt in stills. This was a smoke test, not a quality comparison.
+
 ## Install check
 
 `oneshot-setup.sh` from a fresh prefix with the carrier payload: checksums verified, minimax-h3-mlx cloned at its pin,

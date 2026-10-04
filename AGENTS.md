@@ -1,8 +1,8 @@
 # Agent one-shot — MiniMax H3 on TensorFold (MLX, Apple Silicon)
 
 **Repo:** https://github.com/drowzeys/keys-Mac-TensorFold-MiniMax-H3-MLX  
-**Carrier image:** `ghcr.io/drowzeys/keys-mac-tensorfold-minimax-h3-mlx:1.0` (not a runtime; TensorFold wheel + lock + render script)  
-**Engine:** TensorFold 0.6.5 + H3 family @ `drowzeys/TensorFold` `b8d1682e`, own venv, int8 tensor-unit kernels
+**Carrier image:** `ghcr.io/drowzeys/keys-mac-tensorfold-minimax-h3-mlx:1.1` (not a runtime; TensorFold wheel + lock + render script)  
+**Engine:** TensorFold 0.6.5 + H3 family @ `drowzeys/TensorFold` `ea9b6372`, own venv, int8 tensor-unit kernels
 
 ```bash
 git clone https://github.com/drowzeys/keys-Mac-TensorFold-MiniMax-H3-MLX.git
@@ -10,12 +10,15 @@ cd keys-Mac-TensorFold-MiniMax-H3-MLX
 brew install python@3.11 uv ffmpeg
 bash oneshot-setup.sh      # engine, minimax-h3-mlx @ 79190205, weights 144 GB, Turbo adapter 1.96 GB, test render
 bash scripts/generate.sh "your prompt" out.mp4
+FIRST_FRAME=photo.jpg WIDTH=1344 HEIGHT=768 bash scripts/generate.sh "what happens next" out.mp4   # image to video
 ```
 
 Rules:
 
 - This is not a server. `tensorfold serve` does not route H3; render with `scripts/generate.sh`.
-- Frames must be `17n + 5` (56, 73, 90, 124, 243, 362); width and height multiples of 32.
+- Frames must be `17n + 5` (56, 73, 90, 124, 192, 243, 362); width and height multiples of 32, at most 768x1344 pixels.
+- Image to video: `FIRST_FRAME` is stretched onto the canvas, so match the image's aspect ratio. Only a first frame;
+  no last frame, no reference images.
 - The fast path is M5-only (Metal 4 tensor operations). Elsewhere drop the `--int8-*` flags; the README numbers
   do not apply.
 - Merge adapters with the tool (`--lora`), never by hand into bfloat16: that loses 15-50% of the adapter.
