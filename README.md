@@ -57,13 +57,13 @@ Raw numbers and method: [`bench/results/RESULTS.md`](bench/results/RESULTS.md).
 
 Same first frame, prompt and seed (40905090), 192 frames with audio. Clips and method: [`shootout/`](shootout/).
 
-| Entry | Generation time | Steps | Technology | Video / audio quality |
-|---|---:|---:|---|---|
-| **keys TensorFold H3 + Turbo** | **357 s** | 3 | MLX + int8 Metal kernels + lightx2v Turbo adapter | sharp, most motion / line spoken correctly |
-| RobZombAI H3MLX | 1,675 s | 20 | C + Metal, second-order solver, int8 MLP | sharpest / line spoken correctly |
-| antirez h3.c | 2,018 s | 20 | C + Metal, int8 projections | crisp / line spoken correctly |
-| keys TensorFold H3 | 2,106 s | 20 | MLX + int8 Metal kernels | softer / line spoken correctly |
-| mrbizarro minimax-h3-mlx | 2,451 s | 20 | Python + MLX, pruned bf16 transformer | softer / line spoken correctly |
+| Entry | Generation time | Speed vs h3.c | Steps | Technology | Video / audio quality |
+|---|---:|---:|---:|---|---|
+| **keys TensorFold H3 + Turbo** | **357 s** | **5.65x** | 3 | MLX + int8 Metal kernels + lightx2v Turbo adapter | sharp, most motion / line spoken correctly |
+| RobZombAI H3MLX | 1,675 s | 1.20x | 20 | C + Metal, second-order solver, int8 MLP | sharpest / line spoken correctly |
+| antirez h3.c | 2,018 s | 1.00x (baseline) | 20 | C + Metal, int8 projections | crisp / line spoken correctly |
+| keys TensorFold H3 | 2,106 s | 0.96x | 20 | MLX + int8 Metal kernels | softer / line spoken correctly |
+| mrbizarro minimax-h3-mlx | 2,451 s | 0.82x | 20 | Python + MLX, pruned bf16 transformer | softer / line spoken correctly |
 
 At 20 steps the C engines are faster and sharper; TensorFold leads only with the Turbo adapter. Quality was judged
 from stills, an edge score and speech recognition, not by watching.
