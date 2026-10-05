@@ -70,7 +70,7 @@ PY
 )}"
   if [ "$(printf '%.0f' "$(echo "$GAIN * 10" | bc)")" -ge 10 ]; then
     FILTER="bass=g=$GAIN:f=250:w=0.6,alimiter=limit=0.95:level=disabled"
-    ffmpeg -v error -y -i "$OUT" -i "$WAV" -map 0:v -map 1:a -c:v copy -af "$FILTER" -c:a aac -b:a 256k -shortest "${OUT%.*}.eq.mp4"
+    ffmpeg -v error -y -i "$OUT" -i "$WAV" -map 0:v -map 1:a -c:v copy -af "$FILTER" -c:a aac -b:a 256k "${OUT%.*}.eq.mp4"
     mv "${OUT%.*}.eq.mp4" "$OUT"
     echo "[tensorfold] thin take: bass lifted by $GAIN dB"
   else
