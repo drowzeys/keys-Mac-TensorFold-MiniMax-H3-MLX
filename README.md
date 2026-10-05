@@ -14,20 +14,38 @@ This pack is their work, ported, pinned and measured. See [CREDITS.md](CREDITS.m
 > the base-model sound fixed what was wrong with the adapter's (harsh, echo-like, thin). The full 20 steps are one
 > switch away: `QUALITY=high`. The speed tables below were measured with the earlier 3-pass setting.
 
-**A 5 second 864x480 clip with stereo audio in about 90 seconds at the standard setting** (5 Turbo passes 45 s, sound
-made again 22 s, decode 14 s), or about 50 seconds with the earlier 3 passes and the adapter's own sound
-(`POINTS=4 REVOICE=0`). One-shot install from a GHCR prebuilt carrier. Text to video and **image to video** from a
+**A 5 second 864x480 clip with stereo audio in 95 seconds at the standard setting** (5 Turbo passes 50 s, sound made
+again 21 s, decode 14 s, loading and text 10 s), or about 50 seconds with the earlier 3 passes and the adapter's own
+sound (`POINTS=4 REVOICE=0`). At 768x448: 76 seconds standard, 40 earlier. One-shot install from a GHCR prebuilt carrier. Text to video and **image to video** from a
 first frame.
 
-| Mode | How | 15 s clip (362 frames) at 672x384 |
-|---|---|---:|
-| **Standard** | Turbo adapter, 5 passes; then the base model denoises the sound again, 20 steps, against the finished picture | 219 s |
-| Fast | Turbo adapter, 3 passes, its own sound (`POINTS=4 REVOICE=0`) | about 115 s |
-| **High quality** (`QUALITY=high`) | base model, 20 steps, no adapter | 606 s |
+| Mode | How | 5 s, 768x448 | 5 s, 864x480 | 15 s (362 frames), 672x384 |
+|---|---|---:|---:|---:|
+| **Standard** | Turbo adapter, 5 passes; then the base model denoises the sound again, 20 steps, against the finished picture | **76 s** | **95 s** | **219 s** |
+| Fast | Turbo adapter, 3 passes, its own sound (`POINTS=4 REVOICE=0`) | 40-41 s | about 50 s | about 115 s |
+| **High quality** (`QUALITY=high`) | base model, 20 steps, no adapter | not timed | 210 s | 606 s |
+
+Standard at larger sizes, 8 second clips (from the Studio pack's runs, image step excluded): 864x480 164 s; 1344x768
+698 s; with the 2x decoder, 2048x1152 289 s and 2560x1440 624 s.
 
 The audio step recomputes only the audio rows (about 4% of the sequence) against the picture's stored attention keys
 and values, so its 20 steps cost less than one full pass. Text-to-image scouting, a 2x decoder and 2K presets are in
 the companion pack, [keys-Mac-TensorFold-Studio](https://github.com/drowzeys/keys-Mac-TensorFold-Studio).
+
+## The base-model audio step
+
+The Turbo adapter is what makes the picture fast, and it is also what spoils the sound. So the sound is made twice:
+once with the picture, by the adapter, and thrown away; then again by the base model, which is the one that sounds
+right.
+
+1. After the Turbo passes, the adapter-merged model is unloaded and the released weights are loaded (4 s).
+2. The finished picture, any first frame and the prompt go through the model once, held still, and every block's
+   attention keys and values over them are stored.
+3. The audio starts again from noise and is denoised in 20 steps. Each step runs only the audio rows (1,206 of 29,009
+   on a 15 second clip) against the stored keys and values: about 1.3 s a step instead of 24 s.
+
+It is on by default whenever the adapter is used. `REVOICE=0` keeps the adapter's own sound; `REVOICE=<steps>` sets the
+number of audio steps (20 is the only value tried). Proposed upstream as a draft, ashhart/TensorFold#405.
 
 ![h3.c 20 steps / TensorFold int8 20 steps / TensorFold Turbo int8, same prompt](samples/contact_sheet.jpg)
 
@@ -199,8 +217,8 @@ runtime**: Metal does not run in a container, so `oneshot-setup.sh` installs the
   than Turbo; it is published for 1344x768, which was not tested.
 - **Licence.** MiniMax H3 is under the MiniMax H3 Community License, which excludes some territories. This pack
   ships no weights. Read the licence before downloading them.
-- The H3 family is proposed upstream as a draft pull request, ashhart/TensorFold#384, which holds the first two
-  commits only. It is not part of a TensorFold release.
+- Proposed upstream as draft pull requests: the H3 family (ashhart/TensorFold#384) and the audio step with the 2x
+  decoder (#405). Neither is part of a TensorFold release.
 
 ## Credits
 
