@@ -1,8 +1,8 @@
 # Agent one-shot — MiniMax H3 on TensorFold (MLX, Apple Silicon)
 
 **Repo:** https://github.com/drowzeys/keys-Mac-TensorFold-MiniMax-H3-MLX  
-**Carrier image:** `ghcr.io/drowzeys/keys-mac-tensorfold-minimax-h3-mlx:1.1` (not a runtime; TensorFold wheel + lock + render script)  
-**Engine:** TensorFold 0.6.5 + H3 family @ `drowzeys/TensorFold` `ea9b6372`, own venv, int8 tensor-unit kernels
+**Carrier image:** `ghcr.io/drowzeys/keys-mac-tensorfold-minimax-h3-mlx:1.2` (not a runtime; TensorFold wheel + lock + render script)  
+**Engine:** TensorFold 0.6.5 + H3 family @ `drowzeys/TensorFold` `218bfe24`, own venv, int8 tensor-unit kernels
 
 ```bash
 git clone https://github.com/drowzeys/keys-Mac-TensorFold-MiniMax-H3-MLX.git
@@ -21,9 +21,12 @@ Rules:
   no last frame, no reference images.
 - The fast path is M5-only (Metal 4 tensor operations). Elsewhere drop the `--int8-*` flags; the README numbers
   do not apply.
+- Standard = Turbo adapter, 5 passes, then the sound made again by the base model (`REVOICE=20`). Do not go back to
+  the adapter's own sound (`REVOICE=0`) unless asked: it was judged poor by ear. `QUALITY=high` = 20 steps, no
+  adapter, about three times slower. `POINTS` is passes plus one.
 - Merge adapters with the tool (`--lora`), never by hand into bfloat16: that loses 15-50% of the adapter.
 - Turbo (3 forwards) with int8 lands on a different composition from Turbo in bfloat16. For the closest match
-  to the 20-step picture use `POINTS=21` without `--lora`.
+  to the 20-step picture use `QUALITY=high`.
 - 128 GB+ unified memory; measured on 256 GB only. The float32 adapter merge peaks at 103 GB.
 - MiniMax H3 is under the MiniMax H3 Community License, with territory limits. Do not redistribute weights.
 - The text encoder, audio decoder and MP4 writer are minimax-h3-mlx's, pinned by commit. Do not unpin.

@@ -5,13 +5,29 @@ contributors, mrbizarro (minimax-h3-mlx / Phosphene), Apple's MLX team and every
 (MiniMax H3), NVIDIA Research (Sol-Engine, Sol-Attn, Sol-H3), LightX2V (the Turbo adapter) and FastVideo (FastH3).
 This pack is their work, ported, pinned and measured. See [CREDITS.md](CREDITS.md).
 
-**1.1** · Mac Studio M5 Ultra 256 GB · [TensorFold](https://github.com/ashhart/TensorFold) **0.6.5** + an H3 family ·
+**1.2** · Mac Studio M5 Ultra 256 GB · [TensorFold](https://github.com/ashhart/TensorFold) **0.6.5** + an H3 family ·
 **MiniMax H3** (FL2VA, bfloat16 weights) · int8 kernels on the M5 tensor units · lightx2v **Turbo** adapter
 
-**A 5 second 864x480 clip with stereo audio in about 50 seconds; 40 seconds at 768x448.** The fastest MiniMax H3
-we have measured on Apple Silicon, by a small margin over Phosphene's few-step mode and a large one over the
-20-step engines. One-shot install from a GHCR prebuilt carrier. Text to video and, from 1.1, **image to video** from a
+> **Update, 1.2 (2026-10-04): a new standard setting, and the best result this pack has made.** Video now takes
+> **5 Turbo passes**, and the **sound is made again by the base model** against the finished picture. Judged by eye
+> and ear by the pack's owner on speech and singing clips: 5 passes gave the best picture among 3, 4, 5 and 6, and
+> the base-model sound fixed what was wrong with the adapter's (harsh, echo-like, thin). The full 20 steps are one
+> switch away: `QUALITY=high`. The speed tables below were measured with the earlier 3-pass setting.
+
+**A 5 second 864x480 clip with stereo audio in about 90 seconds at the standard setting** (5 Turbo passes 45 s, sound
+made again 22 s, decode 14 s), or about 50 seconds with the earlier 3 passes and the adapter's own sound
+(`POINTS=4 REVOICE=0`). One-shot install from a GHCR prebuilt carrier. Text to video and **image to video** from a
 first frame.
+
+| Mode | How | 15 s clip (362 frames) at 672x384 |
+|---|---|---:|
+| **Standard** | Turbo adapter, 5 passes; then the base model denoises the sound again, 20 steps, against the finished picture | 219 s |
+| Fast | Turbo adapter, 3 passes, its own sound (`POINTS=4 REVOICE=0`) | about 115 s |
+| **High quality** (`QUALITY=high`) | base model, 20 steps, no adapter | 606 s |
+
+The audio step recomputes only the audio rows (about 4% of the sequence) against the picture's stored attention keys
+and values, so its 20 steps cost less than one full pass. Text-to-image scouting, a 2x decoder and 2K presets are in
+the companion pack, [keys-Mac-TensorFold-Studio](https://github.com/drowzeys/keys-Mac-TensorFold-Studio).
 
 ![h3.c 20 steps / TensorFold int8 20 steps / TensorFold Turbo int8, same prompt](samples/contact_sheet.jpg)
 
@@ -96,7 +112,7 @@ bash oneshot-setup.sh
 
 `oneshot-setup.sh` does the following:
 
-1. Gets TensorFold 0.6.5 with the H3 family (`drowzeys/TensorFold` at `ea9b6372`), from the **GHCR prebuilt
+1. Gets TensorFold 0.6.5 with the H3 family (`drowzeys/TensorFold` at `218bfe24`), from the **GHCR prebuilt
    carrier** when Docker is available (checksums verified), otherwise from git at the same commit.
 2. Installs it with the exact dependency lock ([`requirements.lock`](requirements.lock): mlx 0.32.3, mlx-lm
    0.32.0, mlx-vlm 0.7.4, transformers 5.18.0, …) into its own venv at `~/.local/opt/tensorfold-h3`.
@@ -115,7 +131,8 @@ bash scripts/generate.sh "A hummingbird hovering over red flowers, soft wing hum
 FIRST_FRAME=photo.jpg WIDTH=1344 HEIGHT=768 bash scripts/generate.sh "She turns to the camera and smiles" out.mp4
 WIDTH=768 HEIGHT=448 SEED=7 bash scripts/generate.sh "..." out.mp4
 PROMPT_FILE=prompts/black-mirror-scene.txt SEED=2077 bash scripts/generate.sh "" out.mp4
-ADAPTER=none POINTS=21 bash scripts/generate.sh "..." out.mp4          # 20 steps, no adapter
+QUALITY=high bash scripts/generate.sh "..." out.mp4                    # 20 steps, no adapter: slower, calmer, softer
+POINTS=4 REVOICE=0 bash scripts/generate.sh "..." out.mp4              # the earlier fast setting: 3 passes, adapter sound
 ```
 
 `FRAMES` must be `17n + 5` (56, 73, 90, 124, 192, 243, 362); `WIDTH` and `HEIGHT` multiples of 32, at most 768x1344
@@ -127,15 +144,14 @@ pixels in total (the model's released limit).
 stretched onto `WIDTH` x `HEIGHT`, so pick a canvas with its aspect ratio (1344x768 for 16:9, 768x1344 for 9:16,
 768x768 for square) or crop it first. MiniMax's own image-to-video prompts open with a line such as
 `For the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.`
-followed by the scene description; plain descriptions work too. Works with the Turbo adapter and with
-`ADAPTER=none POINTS=21`. Last-frame and reference-image modes are not wired.
+followed by the scene description; plain descriptions work too. Works in every mode. Last-frame and reference-image modes are not wired.
 
 ### GHCR prebuilt carrier
 
 ```bash
-docker pull ghcr.io/drowzeys/keys-mac-tensorfold-minimax-h3-mlx:1.1
-# index digest sha256:61cc4864a820e46ace4acb971ed71dd2639fd247b31c29b72618a56ae5aeb1a3 (linux/arm64 + linux/amd64)
-docker run --rm -v "$PWD":/out ghcr.io/drowzeys/keys-mac-tensorfold-minimax-h3-mlx:1.1 cp -a /payload/. /out/payload/
+docker pull ghcr.io/drowzeys/keys-mac-tensorfold-minimax-h3-mlx:1.2
+# index digest sha256:ee3677fd98bdc1046bca45750d1124f46e0edb1494a898f00ec50599b4c8989b (linux/arm64 + linux/amd64)
+docker run --rm -v "$PWD":/out ghcr.io/drowzeys/keys-mac-tensorfold-minimax-h3-mlx:1.2 cp -a /payload/. /out/payload/
 ```
 
 The carrier holds the TensorFold wheel, `requirements.lock`, `h3_generate.py` and `SHA256SUMS`. **It is not a Mac
@@ -147,7 +163,7 @@ runtime**: Metal does not run in a container, so `oneshot-setup.sh` installs the
 | Piece | Value |
 |---|---|
 | Host | Mac Studio M5 Ultra, 256 GB, macOS 27.0.1 |
-| Engine | TensorFold 0.6.5 (`609ca419`) + two H3 commits, `drowzeys/TensorFold` @ `ea9b63728b690e511722a18ace3b43521a750789` (Apache-2.0) |
+| Engine | TensorFold 0.6.5 (`609ca419`) + ten commits, `drowzeys/TensorFold` branch `studio` @ `218bfe2497ad8bf8f3d31a8c5943972244c9e9bc` (Apache-2.0) |
 | Model | `MiniMaxAI/MiniMax-H3`, `FL2VA` partition: 33B transformer (61.7 GiB bfloat16), Qwen3-VL text encoder, video and audio VAEs |
 | Adapter | lightx2v MiniMax H3 Turbo v1.0, runner layout as published by Phosphene (sha256 `d51d626f…`) |
 | Borrowed at run time | minimax-h3-mlx @ `79190205`: text encoder, audio decoder, MP4 writer |
@@ -168,6 +184,11 @@ runtime**: Metal does not run in a container, so `oneshot-setup.sh` installs the
   float32 video decode equals its decode. The int8 path does not: a 20-step int8 render keeps the bfloat16
   composition with different detail, and a 3-forward Turbo render in int8 lands on a different composition from
   Turbo in bfloat16. Stills were checked; motion and audio were not reviewed by ear or eye.
+- **Sound.** With the Turbo adapter the sound was judged poor by ear: harsh on speech, worse on singing, with an
+  echo-like quality; the model's two audio channels agree at 20 steps and disagree under the adapter. Making the
+  sound again with the base model fixed it and is standard (`REVOICE=0` keeps the adapter's sound). The audio
+  decoder's hard clip is lifted, an overshooting take is turned down as a whole, and a thin take gets a bass shelf
+  of up to 6 dB (`AUDIO_EQ=off`). Lip-sync was judged by eye, not measured.
 - **Turbo is a distilled model.** It gives sharp frames in 3 forwards and sometimes duplicates figures. The
   20-step render without it is closer to what the base model makes.
 - **M5 only for these numbers.** The int8 kernels need Metal 4 tensor operations. Without them the family runs
@@ -178,8 +199,8 @@ runtime**: Metal does not run in a container, so `oneshot-setup.sh` installs the
   than Turbo; it is published for 1344x768, which was not tested.
 - **Licence.** MiniMax H3 is under the MiniMax H3 Community License, which excludes some territories. This pack
   ships no weights. Read the licence before downloading them.
-- The H3 family is proposed upstream as a draft pull request, ashhart/TensorFold#384. It is not part of a TensorFold
-  release.
+- The H3 family is proposed upstream as a draft pull request, ashhart/TensorFold#384, which holds the first two
+  commits only. It is not part of a TensorFold release.
 
 ## Credits
 

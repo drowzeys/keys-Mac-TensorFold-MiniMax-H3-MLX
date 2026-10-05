@@ -60,7 +60,45 @@ def encode_first_frame(root: Path, image, width: int, height: int, patch):
     return rows
 
 
-def decode(model_dir, root: Path, latents, config, int8: bool = True):
+AUDIO_PEAK = 0.89  # -1 dBFS: where the loudest sample of a clip is brought to when the decoder overshoots
+
+
+def unclipped_audio(audio_vae, latents, hard_clip: bool = False):
+    """The audio decoder's waveform without its hard clip at +-1, scaled down as a whole when it overshoots.
+
+    minimax-h3-mlx's vocoder ends in `mx.clip(x, -1, 1)`. Few-step renders drive it past full scale in places and
+    the clip flattens those peaks, which is audible as harshness. Here the clip is lifted for the call and a clip
+    whose peak exceeds `AUDIO_PEAK` is turned down by one gain, so no sample is flattened.
+    """
+
+    import minimax_h3_mlx.audio_vae as module
+
+    class _Passthrough:
+        def __getattr__(self, name):
+            return getattr(mx, name)
+
+        @staticmethod
+        def clip(x, *_):
+            return x
+
+    original = module.mx
+    module.mx = _Passthrough()
+    try:
+        wave = np.array(audio_vae.decode(latents))[:, 0, :].astype(np.float32)
+    finally:
+        module.mx = original
+    peak = float(np.abs(wave).max())
+    over = int((np.abs(wave) > 1.0).sum())
+    if hard_clip:  # the reference decoder's behaviour, kept for comparisons
+        print(f"[tensorfold] audio peak {peak:.2f}, {over} samples hard-clipped at full scale", flush=True)
+        return np.clip(wave, -1.0, 1.0)
+    gain = min(1.0, AUDIO_PEAK / peak) if peak > 0 else 1.0
+    print(f"[tensorfold] audio peak {peak:.2f} before any clip, {over} samples past full scale, gain "
+          f"{20 * np.log10(gain):.1f} dB", flush=True)
+    return wave * np.float32(gain)
+
+
+def decode(model_dir, root: Path, latents, config, int8: bool = True, upscale_decoder=None, hard_clip: bool = False):
     """Frames from TensorFold's video decoder; the audio decoder is still minimax-h3-mlx's."""
 
     from minimax_h3_mlx.load import load_audio_vae
@@ -74,7 +112,7 @@ def decode(model_dir, root: Path, latents, config, int8: bool = True):
         parts[name] = round(time.perf_counter() - mark, 2)
         mark = time.perf_counter()
 
-    video_decoder = load_video_decoder(model_dir, int8=int8)
+    video_decoder = load_video_decoder(model_dir, int8=int8, upscale_decoder=upscale_decoder)
     audio_vae = load_audio_vae(root / "audio_vae")
     lap("load_vaes")
     video = unpatchify(latents.video_rows, latents.latent_frames, latents.latent_height, latents.latent_width,
@@ -85,7 +123,7 @@ def decode(model_dir, root: Path, latents, config, int8: bool = True):
     audio = unpack_audio(latents.audio_rows, latents.audio_latents)
     amean = mx.array(np.array(acfg.latents_mean, np.float32)).reshape(1, -1, 1)
     astd = mx.array(np.array(acfg.latents_std, np.float32)).reshape(1, -1, 1)
-    wave = np.array(audio_vae.decode((audio * astd + amean).astype(mx.float32)))[:, 0, :].astype(np.float32)
+    wave = unclipped_audio(audio_vae, (audio * astd + amean).astype(mx.float32), hard_clip)
     lap("audio_decode")
     print(f"[tensorfold] decode_parts {parts}", flush=True)
     return frames, wave, acfg.sampling_rate
@@ -144,6 +182,14 @@ def main():
     parser.add_argument("--int8-out", action="store_true", help="int8 attention-output projection")
     parser.add_argument("--unfused-qkv", action="store_true", help="int8 QKV without the fused norm and rotation")
     parser.add_argument("--keep-adaln", action="store_true", help="keep the AdaLN projection weights loaded")
+    parser.add_argument("--audio-shift", type=float, default=None, help="sigma shift of the audio schedule (released: 3)")
+    parser.add_argument("--upscale-vae", help="safetensors of a packed-head (2x) video decoder; frames come out larger")
+    parser.add_argument("--crop", help="WxH: centre-crop the decoded frames before the MP4 is written")
+    parser.add_argument("--revoice", type=int, default=0, metavar="STEPS",
+                        help="after the run, denoise the audio again in STEPS steps with the model without adapters")
+    parser.add_argument("--revoice-exact", action="store_true", help="re-voice with whole-sequence forwards")
+    parser.add_argument("--audio-hard-clip", action="store_true",
+                        help="clip the decoded audio at full scale, as the reference decoder does (for comparisons)")
     parser.add_argument("--float-vae", action="store_true", help="video decoder in float32, without int8 kernels")
     parser.add_argument("--first-frame", default=None, help="image the clip starts from (image to video)")
     parser.add_argument("--parity", action="store_true")
@@ -191,15 +237,42 @@ def main():
     latents = denoise(dit, text, tags, args.width, args.height, args.frames, points, args.seed, subset,
                       release=not args.keep_adaln, condition=condition,
                       keyframes=("first",) if condition is not None else (),
-                      on_step=lambda i, n, s: print(f"[tensorfold] step {i}/{n} {s:.2f}s", flush=True))
+                      on_step=lambda i, n, s: print(f"[tensorfold] step {i}/{n} {s:.2f}s", flush=True),
+                      audio_shift=args.audio_shift)
     denoise_seconds = time.perf_counter() - started
+    revoice_seconds = 0.0
+    if args.revoice:
+        from tensorfold.families.h3.sampler import revoice
+
+        started = time.perf_counter()
+        del dit
+        gc.collect()
+        mx.clear_cache()
+        dit = load_dit(args.model_dir)  # no adapter: the audio comes from the released weights
+        if args.int8_mlp:
+            int8_mlp(dit)
+        if args.int8_qkv or args.int8_out:
+            int8_attention(dit, qkv=args.int8_qkv, out=args.int8_out, fused=not args.unfused_qkv)
+        latents.audio_rows = revoice(dit, text, latents, args.revoice + 1, args.seed, condition,
+                                     exact=args.revoice_exact, release=not args.keep_adaln,
+                                     on_step=lambda i, n, s: print(f"[tensorfold] voice {i}/{n} {s:.2f}s", flush=True))
+        revoice_seconds = time.perf_counter() - started
+        print(f"[tensorfold] re-voiced in {revoice_seconds:.1f}s", flush=True)
     del dit
     gc.collect()
     mx.clear_cache()
 
     started = time.perf_counter()
     frames, wave, rate = decode(args.model_dir, root, latents, h3.DiTConfig.from_checkpoint(args.model_dir),
-                                int8=not args.float_vae)
+                                int8=not args.float_vae, upscale_decoder=args.upscale_vae,
+                                hard_clip=args.audio_hard_clip)
+    if args.crop:
+        crop_w, crop_h = (int(v) for v in args.crop.lower().split("x"))
+        full_h, full_w = frames.shape[1:3]
+        if crop_w > full_w or crop_h > full_h or (full_w - crop_w) % 2 or (full_h - crop_h) % 2:
+            raise SystemExit(f"cannot centre-crop {full_w}x{full_h} frames to {crop_w}x{crop_h}")
+        top, left = (full_h - crop_h) // 2, (full_w - crop_w) // 2
+        frames = np.ascontiguousarray(frames[:, top : top + crop_h, left : left + crop_w])
     from minimax_h3_mlx.media import save_mp4
 
     mux_started = time.perf_counter()
@@ -208,7 +281,7 @@ def main():
     decode_seconds = time.perf_counter() - started
     report = {"output": args.output, "rows": latents.packed.rows, "forwards": len(latents.step_seconds),
               "text_s": round(text_seconds, 1), "load_s": round(load_seconds, 1),
-              "denoise_s": round(denoise_seconds, 1), "decode_s": round(decode_seconds, 1),
+              "denoise_s": round(denoise_seconds, 1), "revoice_s": round(revoice_seconds, 1), "decode_s": round(decode_seconds, 1),
               "per_forward_s": round(float(np.median(latents.step_seconds)), 2),
               "peak_gib": round(mx.get_peak_memory() / 2**30, 1)}
     print("[tensorfold] " + json.dumps(report), flush=True)

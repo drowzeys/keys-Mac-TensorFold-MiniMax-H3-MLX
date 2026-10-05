@@ -15,9 +15,9 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PREFIX="${PREFIX:-$HOME/.local/opt/tensorfold-h3}"
 H3_MODEL_DIR="${H3_MODEL_DIR:-$HOME/h3-models/MiniMax-H3}"
-IMAGE="${IMAGE:-ghcr.io/drowzeys/keys-mac-tensorfold-minimax-h3-mlx:1.1}"
+IMAGE="${IMAGE:-ghcr.io/drowzeys/keys-mac-tensorfold-minimax-h3-mlx:1.2}"
 TF_REPO="https://github.com/drowzeys/TensorFold.git"
-TF_COMMIT="ea9b63728b690e511722a18ace3b43521a750789"
+TF_COMMIT="218bfe2497ad8bf8f3d31a8c5943972244c9e9bc"
 REF_REPO="https://github.com/mrbizarro/minimax-h3-mlx.git"
 REF_COMMIT="79190205258454b43e6c9e50e577de234222419c"
 ADAPTER_NAME="lightx2v_v1.0_768p_ourlayout.safetensors"
@@ -50,8 +50,8 @@ fetch_ghcr() {
 }
 
 step "TensorFold 0.6.5 + H3 family @ ${TF_COMMIT:0:8} (own venv at $PREFIX)"
-# an install from an older pack lacks first-frame support in the sampler; reinstall it
-HAS_ENGINE='import inspect; from tensorfold.families.h3.sampler import denoise; assert "condition" in inspect.signature(denoise).parameters'
+# an install from an older pack lacks the re-voice pass in the sampler; reinstall it
+HAS_ENGINE='from tensorfold.families.h3.sampler import revoice'
 if [ ! -x "$PREFIX/venv/bin/python" ] || ! "$PREFIX/venv/bin/python" -c "$HAS_ENGINE" 2>/dev/null; then
   [ "$MODE" = "--verify" ] && die "TensorFold with the H3 family is not installed at $PREFIX"
   mkdir -p "$HERE/payload" "$PREFIX"
@@ -114,7 +114,7 @@ if [ "$MODE" = "--verify" ] || [ "$MODE" = "--no-render" ]; then
   echo; echo "DONE. Render with: bash $HERE/scripts/generate.sh \"your prompt\" out.mp4"; exit 0
 fi
 
-step "Test render: 5 s, 864x480, Turbo adapter, int8 kernels"
+step "Test render: 5 s, 864x480, standard settings (Turbo 5 passes, sound made again without the adapter)"
 PREFIX="$PREFIX" H3_MODEL_DIR="$H3_MODEL_DIR" PROMPT_FILE="$HERE/prompts/black-mirror-scene.txt" SEED=2077 \
   bash "$HERE/scripts/generate.sh" "" "$HERE/outputs/test.mp4" 2>&1 | grep -E "tensorfold\] \{|rounded|rror|Trace" | sed 's/^/  /'
 [ -s "$HERE/outputs/test.mp4" ] || die "the test render wrote no file"
@@ -122,3 +122,4 @@ echo
 echo "DONE. $HERE/outputs/test.mp4"
 echo "Render: bash $HERE/scripts/generate.sh \"your prompt\" out.mp4   (WIDTH/HEIGHT multiples of 32, FRAMES = 17n+5)"
 echo "Image to video: FIRST_FRAME=photo.jpg bash $HERE/scripts/generate.sh \"what happens next\" out.mp4"
+echo "Higher quality, slower: QUALITY=high bash $HERE/scripts/generate.sh \"your prompt\" out.mp4"
