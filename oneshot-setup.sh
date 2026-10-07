@@ -15,9 +15,9 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PREFIX="${PREFIX:-$HOME/.local/opt/tensorfold-h3}"
 H3_MODEL_DIR="${H3_MODEL_DIR:-$HOME/h3-models/MiniMax-H3}"
-IMAGE="${IMAGE:-ghcr.io/drowzeys/keys-mac-tensorfold-minimax-h3-mlx:1.2}"
+IMAGE="${IMAGE:-ghcr.io/drowzeys/keys-mac-tensorfold-minimax-h3-mlx:1.3}"
 TF_REPO="https://github.com/drowzeys/TensorFold.git"
-TF_COMMIT="218bfe2497ad8bf8f3d31a8c5943972244c9e9bc"
+TF_COMMIT="99fa80a32f7e61d331092064576ada72fdd2d1a4"
 REF_REPO="https://github.com/mrbizarro/minimax-h3-mlx.git"
 REF_COMMIT="79190205258454b43e6c9e50e577de234222419c"
 ADAPTER_NAME="lightx2v_v1.0_768p_ourlayout.safetensors"
@@ -51,7 +51,7 @@ fetch_ghcr() {
 
 step "TensorFold 0.6.5 + H3 family @ ${TF_COMMIT:0:8} (own venv at $PREFIX)"
 # an install from an older pack lacks the re-voice pass in the sampler; reinstall it
-HAS_ENGINE='from tensorfold.families.h3.sampler import revoice'
+HAS_ENGINE='from tensorfold.families.h3.sampler import revoice, default_gates'
 if [ ! -x "$PREFIX/venv/bin/python" ] || ! "$PREFIX/venv/bin/python" -c "$HAS_ENGINE" 2>/dev/null; then
   [ "$MODE" = "--verify" ] && die "TensorFold with the H3 family is not installed at $PREFIX"
   mkdir -p "$HERE/payload" "$PREFIX"

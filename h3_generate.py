@@ -185,6 +185,16 @@ def main():
     parser.add_argument("--audio-shift", type=float, default=None, help="sigma shift of the audio schedule (released: 3)")
     parser.add_argument("--upscale-vae", help="safetensors of a packed-head (2x) video decoder; frames come out larger")
     parser.add_argument("--crop", help="WxH: centre-crop the decoded frames before the MP4 is written")
+    parser.add_argument("--fasth3", help="a FastH3 checkpoint folder: its transformer, schedule and routed attention")
+    parser.add_argument("--vsa-impl", default="reference", choices=("reference", "simd"))
+    parser.add_argument("--dense", action="store_true", help="with --fasth3: dense attention instead of routed")
+    parser.add_argument("--step-cache", type=float, default=0.0,
+                        help="reuse the last velocity while the summed relative move stays under this (0.05)")
+    parser.add_argument("--attention-every", type=int, default=0,
+                        help="compute attention every N-th middle step and reuse it otherwise (2)")
+    parser.add_argument("--fast-gates", help="A,B,C: opening and closing steps that always compute attention, and "
+                                             "steps before the velocity cache may skip")
+    parser.add_argument("--save-frames", help="also write the decoded frames to this .npy file, for comparisons")
     parser.add_argument("--revoice", type=int, default=0, metavar="STEPS",
                         help="after the run, denoise the audio again in STEPS steps with the model without adapters")
     parser.add_argument("--revoice-exact", action="store_true", help="re-voice with whole-sequence forwards")
@@ -214,7 +224,15 @@ def main():
     print(f"[tensorfold] text: {text.shape[1]} rows in {text_seconds:.1f}s", flush=True)
 
     started = time.perf_counter()
-    dit = load_dit(args.model_dir)
+    fast = None
+    if args.fasth3:
+        from tensorfold.families.h3 import fasth3
+
+        dit, gates, fast = fasth3.load_fasth3(args.fasth3)
+        print(f"[tensorfold] FastH3: {fast.forwards} forwards, video shift {fast.video_shift}, sparsity "
+              f"{fast.sparsity}, tile {fast.tile}, task {fast.task}", flush=True)
+    else:
+        dit = load_dit(args.model_dir)
     for spec in args.lora:
         path, _, strength = spec.partition(":")
         print(f"[tensorfold] {merge(dit, path, float(strength or 1.0))}", flush=True)
@@ -233,12 +251,21 @@ def main():
     points, subset = args.points, None
     if args.subset:
         points, subset = parse_subset(args.subset)
+    schedule = {}
+    if fast is not None:
+        schedule = {"nodes": fast.nodes, "video_shift": fast.video_shift}
+        if args.audio_shift is None:
+            args.audio_shift = fast.audio_shift
+        if fast.sparsity > 0 and not args.dense:
+            schedule["prepare"] = fasth3.route(dit, gates, fast.sparsity, fast.tile, args.vsa_impl)
     started = time.perf_counter()
     latents = denoise(dit, text, tags, args.width, args.height, args.frames, points, args.seed, subset,
                       release=not args.keep_adaln, condition=condition,
                       keyframes=("first",) if condition is not None else (),
                       on_step=lambda i, n, s: print(f"[tensorfold] step {i}/{n} {s:.2f}s", flush=True),
-                      audio_shift=args.audio_shift)
+                      audio_shift=args.audio_shift, step_cache=args.step_cache,
+                      attention_every=args.attention_every,
+                      gates=tuple(int(v) for v in args.fast_gates.split(",")) if args.fast_gates else None, **schedule)
     denoise_seconds = time.perf_counter() - started
     revoice_seconds = 0.0
     if args.revoice:
@@ -266,6 +293,8 @@ def main():
     frames, wave, rate = decode(args.model_dir, root, latents, h3.DiTConfig.from_checkpoint(args.model_dir),
                                 int8=not args.float_vae, upscale_decoder=args.upscale_vae,
                                 hard_clip=args.audio_hard_clip)
+    if args.save_frames:
+        np.save(args.save_frames, frames[::8])
     if args.crop:
         crop_w, crop_h = (int(v) for v in args.crop.lower().split("x"))
         full_h, full_w = frames.shape[1:3]
@@ -280,6 +309,7 @@ def main():
     print(f"[tensorfold] mux {time.perf_counter() - mux_started:.2f}s", flush=True)
     decode_seconds = time.perf_counter() - started
     report = {"output": args.output, "rows": latents.packed.rows, "forwards": len(latents.step_seconds),
+              "attention_reused": latents.reused_steps, "skipped": latents.skipped_steps,
               "text_s": round(text_seconds, 1), "load_s": round(load_seconds, 1),
               "denoise_s": round(denoise_seconds, 1), "revoice_s": round(revoice_seconds, 1), "decode_s": round(decode_seconds, 1),
               "per_forward_s": round(float(np.median(latents.step_seconds)), 2),

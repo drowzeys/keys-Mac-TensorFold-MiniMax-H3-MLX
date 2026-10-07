@@ -1,15 +1,15 @@
 #!/bin/bash
 # Render one clip with MiniMax H3 on TensorFold.
 # Standard: the Turbo adapter makes the picture in 5 passes, then the model without the adapter makes the sound again
-# against the finished picture (20 audio steps). QUALITY=high: 20 steps without the adapter, picture and sound.
+# against the finished picture (20 audio steps). QUALITY=high: 20 steps without the adapter, fast recipe. QUALITY=full: plain 20 steps.
 #   bash scripts/generate.sh "a prompt" out.mp4
 #   PROMPT_FILE=prompts/black-mirror-scene.txt bash scripts/generate.sh "" out.mp4
-#   QUALITY=high bash scripts/generate.sh "a prompt" out.mp4               # 20 steps, no adapter: slower, calmer, softer
+#   QUALITY=high bash scripts/generate.sh "a prompt" out.mp4               # 20 steps, no adapter, fast recipe (QUALITY=full for plain)
 #   FIRST_FRAME=photo.jpg bash scripts/generate.sh "what happens next" out.mp4   # image to video
 #   X2=1 X2_VAE=decoder.safetensors WIDTH=1344 HEIGHT=768 bash scripts/generate.sh "a prompt" out.mp4   # 2x decoder
 # Environment: PREFIX, H3_MODEL_DIR, ADAPTER (a file, or none), FIRST_FRAME (an image the clip starts from; it is
 # stretched onto the canvas, so match its aspect ratio), WIDTH, HEIGHT, FRAMES (17n+5), SEED,
-# QUALITY (standard or high), POINTS (sigma points, one more than the passes: default 6 with the adapter, 21
+# QUALITY (standard, high or full), POINTS (sigma points, one more than the passes: default 6 with the adapter, 21
 # without), REVOICE (audio steps made again without the adapter after an adapter render: default 20, 0 keeps the
 # adapter's own sound), AUDIO_EQ / AUDIO_BASS / AUDIO_BASS_TARGET (see below), AUDIO_SHIFT (experimental: the audio schedule's shift,
 # 3 in the model; lower values add bass but roughen speech), EXTRA (extra flags for h3_generate.py).
@@ -18,7 +18,9 @@
 set -euo pipefail
 PREFIX="${PREFIX:-$HOME/.local/opt/tensorfold-h3}"
 H3_MODEL_DIR="${H3_MODEL_DIR:-$HOME/h3-models/MiniMax-H3}"
-[ "${QUALITY:-standard}" != high ] || ADAPTER=none
+# QUALITY=high: 20 steps without the adapter, with the fast recipe (the first four and last two steps in full, a
+# velocity cache and attention reuse in between: about twice as fast as plain). QUALITY=full: plain 20 steps.
+case "${QUALITY:-standard}" in high) ADAPTER=none; RECIPE="--step-cache 0.05 --attention-every 2";; full) ADAPTER=none; RECIPE="";; *) RECIPE="";; esac
 ADAPTER="${ADAPTER:-$PREFIX/adapters/lightx2v_v1.0_768p_ourlayout.safetensors}"
 # sigma points are one more than the passes: 5 passes with the adapter, 20 without
 if [ "$ADAPTER" = none ]; then POINTS="${POINTS:-21}"; REVOICE="${REVOICE:-0}"; else POINTS="${POINTS:-6}"; REVOICE="${REVOICE:-20}"; fi
@@ -44,7 +46,7 @@ ARGS=("$H3_MODEL_DIR" -o "$OUT" --width "$W" --height "$H" --frames "${FRAMES:-1
 if [ -n "${PROMPT_FILE:-}" ]; then ARGS+=(--prompt-file "$PROMPT_FILE"); else ARGS+=(--prompt "$PROMPT"); fi
 [ -z "${CROP:-}" ] || ARGS+=(--crop "$CROP")
 # shellcheck disable=SC2086
-"$PREFIX/venv/bin/python" "$PREFIX/h3_generate.py" "${ARGS[@]}" ${EXTRA:-}
+"$PREFIX/venv/bin/python" "$PREFIX/h3_generate.py" "${ARGS[@]}" $RECIPE ${EXTRA:-}
 # Few-step audio varies a lot from take to take, and some takes come out thin (little 120-300 Hz). With an adapter,
 # the uncompressed track the render leaves beside the clip is measured: when the bass band is under the level of a
 # full take, a low shelf lifts it by what is missing (6 dB at most) and a limiter guards the peaks. A take that is

@@ -5,9 +5,13 @@ contributors, mrbizarro (minimax-h3-mlx / Phosphene), Apple's MLX team and every
 (MiniMax H3), NVIDIA Research (Sol-Engine, Sol-Attn, Sol-H3), LightX2V (the Turbo adapter) and FastVideo (FastH3).
 This pack is their work, ported, pinned and measured. See [CREDITS.md](CREDITS.md).
 
-**1.2** · Mac Studio M5 Ultra 256 GB · [TensorFold](https://github.com/ashhart/TensorFold) **0.6.5** + an H3 family ·
+**1.3** · Mac Studio M5 Ultra 256 GB · [TensorFold](https://github.com/ashhart/TensorFold) **0.6.5** + an H3 family ·
 **MiniMax H3** (FL2VA, bfloat16 weights) · int8 kernels on the M5 tensor units · lightx2v **Turbo** adapter
 
+> **1.3 (2026-10-07): the 20-step mode is twice as fast.** `QUALITY=high` now uses a velocity cache and attention
+> reuse after mlx-serve's fast recipe: a 10 second 1312x736 clip in 1,301 s against 2,763 s for plain 20 steps, with
+> stills that hold up beside it. `QUALITY=full` keeps the plain 20 steps.
+>
 > **Update, 1.2 (2026-10-04): a new standard setting, and the best result this pack has made.** Video now takes
 > **5 Turbo passes**, and the **sound is made again by the base model** against the finished picture. Judged by eye
 > and ear by the pack's owner on speech and singing clips: 5 passes gave the best picture among 3, 4, 5 and 6, and
@@ -130,7 +134,7 @@ bash oneshot-setup.sh
 
 `oneshot-setup.sh` does the following:
 
-1. Gets TensorFold 0.6.5 with the H3 family (`drowzeys/TensorFold` at `218bfe24`), from the **GHCR prebuilt
+1. Gets TensorFold 0.6.5 with the H3 family (`drowzeys/TensorFold` at `99fa80a3`), from the **GHCR prebuilt
    carrier** when Docker is available (checksums verified), otherwise from git at the same commit.
 2. Installs it with the exact dependency lock ([`requirements.lock`](requirements.lock): mlx 0.32.3, mlx-lm
    0.32.0, mlx-vlm 0.7.4, transformers 5.18.0, …) into its own venv at `~/.local/opt/tensorfold-h3`.
@@ -167,9 +171,9 @@ followed by the scene description; plain descriptions work too. Works in every m
 ### GHCR prebuilt carrier
 
 ```bash
-docker pull ghcr.io/drowzeys/keys-mac-tensorfold-minimax-h3-mlx:1.2
-# index digest sha256:ee3677fd98bdc1046bca45750d1124f46e0edb1494a898f00ec50599b4c8989b (linux/arm64 + linux/amd64)
-docker run --rm -v "$PWD":/out ghcr.io/drowzeys/keys-mac-tensorfold-minimax-h3-mlx:1.2 cp -a /payload/. /out/payload/
+docker pull ghcr.io/drowzeys/keys-mac-tensorfold-minimax-h3-mlx:1.3
+# index digest sha256:36b11fa3e0df8359859912d686829266af917e6ad9020ed9348b6807ef23444e (linux/arm64 + linux/amd64)
+docker run --rm -v "$PWD":/out ghcr.io/drowzeys/keys-mac-tensorfold-minimax-h3-mlx:1.3 cp -a /payload/. /out/payload/
 ```
 
 The carrier holds the TensorFold wheel, `requirements.lock`, `h3_generate.py` and `SHA256SUMS`. **It is not a Mac
@@ -181,7 +185,7 @@ runtime**: Metal does not run in a container, so `oneshot-setup.sh` installs the
 | Piece | Value |
 |---|---|
 | Host | Mac Studio M5 Ultra, 256 GB, macOS 27.0.1 |
-| Engine | TensorFold 0.6.5 (`609ca419`) + ten commits, `drowzeys/TensorFold` branch `studio` @ `218bfe2497ad8bf8f3d31a8c5943972244c9e9bc` (Apache-2.0) |
+| Engine | TensorFold 0.6.5 (`609ca419`) + ten commits, `drowzeys/TensorFold` branch `studio` @ `99fa80a32f7e61d331092064576ada72fdd2d1a4` (Apache-2.0) |
 | Model | `MiniMaxAI/MiniMax-H3`, `FL2VA` partition: 33B transformer (61.7 GiB bfloat16), Qwen3-VL text encoder, video and audio VAEs |
 | Adapter | lightx2v MiniMax H3 Turbo v1.0, runner layout as published by Phosphene (sha256 `d51d626f…`) |
 | Borrowed at run time | minimax-h3-mlx @ `79190205`: text encoder, audio decoder, MP4 writer |
