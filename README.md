@@ -49,7 +49,7 @@ right.
    on a 15 second clip) against the stored keys and values: about 1.3 s a step instead of 24 s.
 
 It is on by default whenever the adapter is used. `REVOICE=0` keeps the adapter's own sound; `REVOICE=<steps>` sets the
-number of audio steps (20 is the only value tried). Proposed upstream as a draft, ashhart/TensorFold#405.
+number of audio steps (20 is the only value tried). It was offered upstream (ashhart/TensorFold#405) and closed with the H3 family; it lives in the fork.
 
 ![h3.c 20 steps / TensorFold int8 20 steps / TensorFold Turbo int8, same prompt](samples/contact_sheet.jpg)
 
@@ -221,8 +221,10 @@ runtime**: Metal does not run in a container, so `oneshot-setup.sh` installs the
   than Turbo; it is published for 1344x768, which was not tested.
 - **Licence.** MiniMax H3 is under the MiniMax H3 Community License, which excludes some territories. This pack
   ships no weights. Read the licence before downloading them.
-- Proposed upstream as draft pull requests: the H3 family (ashhart/TensorFold#384) and the audio step with the 2x
-  decoder (#405). Neither is part of a TensorFold release.
+- **Not part of upstream TensorFold.** The H3 family, the Qwen-Image family and the audio step were offered to
+  ashhart/TensorFold as draft pull requests (#384, #393, #405) and closed on 2026-10-07: the engine is built around
+  token lanes with exact output, it does not trade precision as the int8 kernels do, its Python engine is frozen and
+  its new Zig engine drives Metal without MLX. This code lives in the `drowzeys/TensorFold` fork, on 0.6.5.
 
 ## Credits
 
